@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Networking;
 using UnityEngine.UI;
+using UnityEngine.EventSystems;
 
 public class PlayerChat : NetworkBehaviour {
 
@@ -29,20 +30,93 @@ public class PlayerChat : NetworkBehaviour {
             Text text = textObj.AddComponent<Text>();
             text.rectTransform.anchorMin = new Vector2(0.5f ,0f);
             text.rectTransform.anchorMax = new Vector2(0.5f, 0f);  //アンカー位置調整
-            float posy = -(canvasHeight / 2) + inputFieldToDown + (chatHistoryHeight / 2) * (i + 1) + chatHistoryHeight * i + chatHistoryHeight / 2;  //最下部＋InputFieldの上部までの距離＋隙間等
+            float posy = -(canvasHeight / 2) + inputFieldToDown + (chatHistoryHeight / 2) * (i + 2) + chatHistoryHeight * i + chatHistoryHeight / 2;  //最下部＋InputFieldの上部までの距離＋隙間等
             Vector2 pos = new Vector2(0, posy);
             text.rectTransform.anchoredPosition = pos;  //場所指定
             text.rectTransform.sizeDelta = new Vector2(chatSizeX, chatHistoryHeight);  //サイズ指定
             text.font = Resources.GetBuiltinResource(typeof(Font), "Arial.ttf") as Font;  //フォント指定
             text.fontSize = chatHistoryTextSize;  //フォントサイズ指定
             text.color = Color.black;  //色指定
+            text.text = "";  //文字指定
+        }
 
-            text.text = i.ToString();  //文字指定
+        chatHistory = new Text[chatHistoryLength];
+        GameObject texts = GameObject.Find("Texts");
+        for (int i = 0; i < chatHistory.Length; i++)
+        {
+            chatHistory[i] = texts.transform.GetChild(i).GetComponent<Text>();
+            chatHistory[i].text = "";
         }
 	}
-	
-	// Update is called once per frame
-	void Update () {
-		
+
+    public override void OnStartLocalPlayer()
+    {
+        inputField = GameObject.Find("InputField").GetComponent<InputField>();
+    }
+
+    // Update is called once per frame
+    void Update () {
+        if (!isLocalPlayer) { return; }
+        if (Input.GetKeyDown(KeyCode.Return))
+        {
+            if(inputField.text.Length > 0)
+            {
+                CmdPost(inputField.text);
+                inputField.text = "";
+            }
+        }
+        if (Input.GetMouseButtonDown(0)) { RayFire(); }
 	}
+
+    void RayFire()
+    {
+        PointerEventData pointer = new PointerEventData(EventSystem.current);
+        pointer.position = Input.mousePosition;
+        List<RaycastResult> raycastResults = new List<RaycastResult>();
+        EventSystem.current.RaycastAll(pointer, raycastResults);
+        /*for(int i = 0; i < chatHistory.Length; i++)
+        {
+            chatHistory[i].color = Color.black;
+        }*/
+        for(int i = 0; i < raycastResults.Count; i++)
+        {
+            if(raycastResults[i].gameObject.transform.parent.gameObject == GameObject.Find("Texts").gameObject)
+            {
+                CmdColor(raycastResults[i].gameObject.name);
+            }
+        }
+    }
+
+    [Command]
+    void CmdPost(string text)
+    {
+        RpcPost(text);
+    }
+
+    [Command]
+    void CmdColor(string name)
+    {
+        RpcColor(name);
+    }
+
+    [ClientRpc]
+    void RpcPost(string text)
+    {
+        for(int i = chatHistory.Length-1; i > 0; i--)
+        {
+            chatHistory[i].text = chatHistory[i - 1].text;
+            chatHistory[i].color = chatHistory[i - 1].color;
+        }
+        chatHistory[0].text = text;
+        chatHistory[0].color = Color.black;
+    }
+
+    [ClientRpc]
+    void RpcColor(string name)
+    {
+        for(int i = 0; i < chatHistory.Length; i++)
+        {
+            if(name == "Text" + i.ToString()) { chatHistory[i].GetComponent<Text>().color = Color.cyan; }
+        }
+    }
 }

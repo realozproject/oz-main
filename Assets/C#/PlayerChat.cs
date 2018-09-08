@@ -4,30 +4,38 @@ using UnityEngine;
 using UnityEngine.Networking;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
+using System;
 
 public class PlayerChat : NetworkBehaviour {
 
     [SerializeField] private int chatHistoryLength;
     private Text[] chatHistory;
     [SerializeField]  private int chatSizeX = 1500;
+    [SerializeField] private List<Color> remainColor;
     private InputField inputField;
-
+    private InputField myName;
+    public Color myColor;
+    public GameObject myButton;
+    
 	// Use this for initialization
 	void Start () {
         GameObject canvas = GameObject.Find("Canvas");
+        remainColor = GameObject.Find("ColorManagement").GetComponent<ColorManagement>().remainColor;
         float canvasHeight = canvas.GetComponent<RectTransform>().sizeDelta.y;  //Canvasの高さ取得
         float inputFieldToDown = canvas.transform.Find("InputField").GetComponent<RectTransform>().sizeDelta.y / 2 + canvas.transform.Find("InputField").GetComponent<RectTransform>().anchoredPosition.y;
         //画面下から入力文字フィールドの上部までの距離取得
         float allHistoryHeight = canvasHeight - inputFieldToDown;  //chatHistoryに使用できる幅
         float chatHistoryHeight = allHistoryHeight / ((float)chatHistoryLength + ((float)chatHistoryLength + 1) / 2);  //一つのテキスト履歴に使用できる幅。一つのテキスト履歴の幅を半分にした隙間を作るので(float)chatHistoryLength + 1) / 2を追加する。
-        int chatHistoryTextSize = Mathf.FloorToInt(chatHistoryHeight * 9 / 10) - 1;  //文字サイズはテキスト幅の9/10までの整数型なので、切り捨て
-
+        int chatHistoryTextSize = Mathf.FloorToInt(chatHistoryHeight * 9 / 10) - 5;  //文字サイズはテキスト幅の9/10までの整数型なので、切り捨て
+        
         for (int i = 0; i < chatHistoryLength; i++)
         {
             GameObject textObj = new GameObject("Text");
             textObj.name = "Text" + i.ToString();
             textObj.transform.parent = canvas.transform.Find("Texts").transform;
             Text text = textObj.AddComponent<Text>();
+            float diffScale = text.rectTransform.localScale.x;
+            text.rectTransform.localScale = new Vector3(1, 1, 1);
             text.rectTransform.anchorMin = new Vector2(0.5f ,0f);
             text.rectTransform.anchorMax = new Vector2(0.5f, 0f);  //アンカー位置調整
             float posy = -(canvasHeight / 2) + inputFieldToDown + (chatHistoryHeight / 2) * (i + 2) + chatHistoryHeight * i + chatHistoryHeight / 2;  //最下部＋InputFieldの上部までの距離＋隙間等
@@ -47,11 +55,21 @@ public class PlayerChat : NetworkBehaviour {
             chatHistory[i] = texts.transform.GetChild(i).GetComponent<Text>();
             chatHistory[i].text = "";
         }
+
+        if (remainColor.Count != 0) {
+            List<GameObject> buttons = GameObject.Find("ColorManagement").GetComponent<ColorManagement>().buttons;
+            myColor = remainColor[0];
+            myButton = buttons[0];
+            remainColor.Remove(remainColor[0]);
+            buttons.Remove(buttons[0]);
+        }
+        else { Debug.Log("There is over color."); }
 	}
 
     public override void OnStartLocalPlayer()
     {
         inputField = GameObject.Find("InputField").GetComponent<InputField>();
+        myName = GameObject.Find("MyName").GetComponent<InputField>();
     }
 
     // Update is called once per frame
@@ -63,6 +81,10 @@ public class PlayerChat : NetworkBehaviour {
             {
                 CmdPost(inputField.text);
                 inputField.text = "";
+            }
+            if(myName.text.Length > 0)
+            {
+                CmdName(myName.text);
             }
         }
         if (Input.GetMouseButtonDown(0)) { RayFire(); }
@@ -82,7 +104,11 @@ public class PlayerChat : NetworkBehaviour {
         {
             if(raycastResults[i].gameObject.transform.parent.gameObject == GameObject.Find("Texts").gameObject)
             {
-                CmdColor(raycastResults[i].gameObject.name);
+                if(raycastResults[i].gameObject.GetComponent<Text>().color == myColor)
+                {
+                    CmdColor(raycastResults[i].gameObject.name, false);
+                }
+                CmdColor(raycastResults[i].gameObject.name,true);
             }
         }
     }
@@ -94,9 +120,15 @@ public class PlayerChat : NetworkBehaviour {
     }
 
     [Command]
-    void CmdColor(string name)
+    void CmdColor(string name,bool isColor)
     {
-        RpcColor(name);
+        RpcColor(name, isColor);
+    }
+
+    [Command]
+    void CmdName(string text)
+    {
+        RpcName(text);
     }
 
     [ClientRpc]
@@ -112,11 +144,33 @@ public class PlayerChat : NetworkBehaviour {
     }
 
     [ClientRpc]
-    void RpcColor(string name)
+    void RpcColor(string name, bool isColor)
     {
         for(int i = 0; i < chatHistory.Length; i++)
         {
-            if(name == "Text" + i.ToString()) { chatHistory[i].GetComponent<Text>().color = Color.cyan; }
+            if(name == "Text" + i.ToString()) {
+                for (int j = 0; j < chatHistory.Length; j++)
+                {
+                    if (chatHistory[j].GetComponent<Text>().color == myColor) { chatHistory[j].GetComponent<Text>().color = Color.black; }
+                }
+                if (isColor)
+                {
+                    chatHistory[i].GetComponent<Text>().color = myColor;
+                }
+                else
+                {
+                    chatHistory[i].GetComponent<Text>().color = Color.black;
+                }
+                break;
+            }
         }
     }
+
+    [ClientRpc]
+    void RpcName(string text)
+    {
+        myButton.transform.GetChild(0).GetComponent<Text>().text = text;
+        Debug.Log(myButton);
+    }
+
 }
